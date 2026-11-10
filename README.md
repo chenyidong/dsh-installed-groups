@@ -20,11 +20,19 @@
 
 ## 安装
 
+**GitHub 直装（本仓库即发布渠道，未占 npm 包名）：**
+
+```bash
+dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.0
+```
+
+在 DSH 里也可让 Agent 用 `plugin_manager` 的 `install_bundle`，target 填上面 `github:` 开头的规格。装完重启 DSH 生效（宿主路由需要新进程；不重启也能用，只是分类暂存浏览器）。
+
+**本地目录安装（开发态）：**
+
 ```bash
 dsh plugin --profile <你的 profile> add <本目录绝对路径>
 ```
-
-或让 Agent 用 `plugin_manager` 的 `install_bundle` 指向本目录。装完重启 DSH 生效（宿主路由需要新进程；不重启也能用，只是分类暂存浏览器）。
 
 ## 结构
 
