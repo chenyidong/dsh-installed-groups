@@ -10,6 +10,7 @@
 - **搜索**：按插件名、描述、分类名实时过滤；搜索时自动展开命中分类并显示 `命中/总数`。
 - **版本号**：每行插件名后面跟当前装着的版本（如 `v0.30.1`）；来源是 profile 的 `node_modules`，npm / GitHub / 本地目录装的都读得到，读不到就只显示名字。
 - **一键缩放**：`△ 全部折叠 / ▽ 全部展开` 一键切换所有分类；`密度：舒适 ⇄ 紧凑` 一键切换行高密度（紧凑隐藏描述、行距减半），偏好持久保存。
+- **打开详情**：点插件名或行的空白处打开官方详情页；开关、分类按钮、手动徽标各管各的，不会被误触发。
 - **真实开关**：每行的开关直接调用官方 `pluginManager.setBundleEnabled`，与官方页永不打架；内核管理的行只标「内核」不提供开关。
 - **布局持久**：分类覆盖与顺序存在 `$DSH_HOME/dsh-installed-groups/layout.json`（真实文件，升级插件、清浏览器存储都不丢）；宿主半边未就绪时自动退回浏览器存储并在工具栏标注。
 
@@ -25,7 +26,7 @@
 **GitHub 直装（本仓库即发布渠道，未占 npm 包名）：**
 
 ```bash
-dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.1
+dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.2
 ```
 
 在 DSH 里也可让 Agent 用 `plugin_manager` 的 `install_bundle`，target 填上面 `github:` 开头的规格。装完重启 DSH 生效（宿主路由需要新进程；不重启也能用，只是分类暂存浏览器）。

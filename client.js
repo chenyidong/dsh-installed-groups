@@ -545,20 +545,29 @@ window.__ModuleLoader__.load({
       row.addEventListener('dragstart', (event) => {
         event.dataTransfer.setData('text/plain', `item:${item.name}`)
       })
+      // 整行都可点开详情；点在自己的控件（开关/分类按钮/徽标）上时由控件自己处理。
+      row.addEventListener('click', (event) => {
+        if (event.target instanceof Element && event.target.closest('button,input,.ig-tag,.ig-name')) return
+        openDetail()
+      })
+
+      // 打开官方详情：卡片虽被 CSS 隐藏，.click() 仍会派发到 React 处理器。
+      // 标题是 CardHead 里的可点元素：优先非开关的按钮，兜底点卡片本身。
+      // 局部名别叫 card：与上面那个取卡片的 card() 同名就是自遮蔽，初始化前引用
+      // 直接抛 ReferenceError，点名字会静默失效（详情页永远打不开）。
+      function openDetail() {
+        const el = card()
+        if (!el) return
+        const target = [...el.querySelectorAll('button')].find((btn) => btn.getAttribute('role') !== 'switch')
+        if (target) target.click()
+        else el.click()
+      }
 
       const name = document.createElement('span')
       name.className = 'ig-name'
       name.textContent = item.name
       name.title = '打开官方详情页'
-      name.addEventListener('click', () => {
-        // 打开官方详情：卡片虽被 CSS 隐藏，.click() 仍会派发到 React 处理器。
-        // 标题是 CardHead 里的可点元素：优先非开关的按钮，兜底点卡片本身。
-        const card = card()
-        if (!card) return
-        const target = [...card.querySelectorAll('button')].find((btn) => btn.getAttribute('role') !== 'switch')
-        if (target) target.click()
-        else card.click()
-      })
+      name.addEventListener('click', openDetail)
 
       const desc = document.createElement('span')
       desc.className = 'ig-desc'
