@@ -6,8 +6,8 @@
  * 分类列表插进同一个滚动容器；数据从官方卡片 DOM 读，开关代理点击官方开关。
  * 官方 React 怎么重建都不影响我们——它从不知道自己的卡片被 CSS 藏起来了。
  *
- * 功能：自动分类（RULES 关键词）+ 手动调整（拖到 chip / 行内下拉）+ 搜索 +
- * 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类 + 简介中文翻译。
+ * 功能：自动分类（RULES 关键词）+ 自带官方包单独一组 + 手动调整（拖到 chip /
+ * 行内下拉）+ 搜索 + 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类 + 简介中文翻译。
  * 开关/详情/卸载走官方。布局与译文都存宿主半边 /installed-groups/layout
  * （$DSH_HOME 文件），没挂上退回 localStorage。译文按「插件名 + 原文」缓存，
  * 翻过的直接加载保存结果，只有原文变了才重翻。
@@ -22,6 +22,7 @@ window.__ModuleLoader__.load({
     const LAYOUT_STORE = 'dsh-installed-groups.layout.v1'
     const DENSITY_STORE = 'dsh-installed-groups.density.v1'
     const UNGROUPED = '__other__'
+    const BUILTIN = '__builtin__'   // 随 DSH 发布、不在 profile 的自带官方包，单独一组
     const TRANS_ON_STORE = 'dsh-installed-groups.trans.v1'
 
     /** 自动分类规则：按序匹配，第一条命中定类。匹配包名或简介（中英皆宜）。 */
@@ -38,8 +39,13 @@ window.__ModuleLoader__.load({
       { id: 'sys', name: '系统工具', color: '#8a8a8a', kw: ['restart', 'reload', 'update', 'config', 'backup', 'mask', 'prune', 'purge', 'sandbox', 'safety', 'armory', 'pocket', '重启', '刷新', '更新', '配置', '安全'] },
     ]
     const RULE_BY_ID = new Map(RULES.map((rule) => [rule.id, rule]))
-    const titleOf = (id) => (id === UNGROUPED ? '未分类' : RULE_BY_ID.get(id)?.name ?? id)
-    const colorOf = (id) => RULE_BY_ID.get(id)?.color ?? '#8a8a8a'
+    const titleOf = (id) => (id === UNGROUPED ? '未分类'
+      : id === BUILTIN ? '自带插件' : RULE_BY_ID.get(id)?.name ?? id)
+    const colorOf = (id) => (id === BUILTIN ? '#3d7fbf' : RULE_BY_ID.get(id)?.color ?? '#8a8a8a')
+
+    /** 随 DSH 发布、不在 profile node_modules 里的官方自带包：@deepseek-ai/ 前缀。
+     *  profile 里绝不装这个前缀（实测 0 个），用它判自带干净、不会误伤用户装的包。 */
+    const isBuiltin = (name) => typeof name === 'string' && name.startsWith('@deepseek-ai/')
 
     function autoCategoryOf(name, description) {
       const text = `${name} ${description}`.toLowerCase()
@@ -108,6 +114,17 @@ window.__ModuleLoader__.load({
 
     /* ------------------------------------------------------------------ 翻译 */
 
+    /** 是否值得译成中文：纯英文，或「英文主体 + 中文尾巴」的英文主导长串。
+     *  旧判据「含任意中文就不翻」会把中英混合的英文主体整段放过 —— 那正是
+     *  「还有两行是英文」的根因之一。这里按开头英文段判断，中文尾巴不再免翻。 */
+    function needsTranslationText(text) {
+      if (!text) return false
+      if (!/[\u4e00-\u9fff]/.test(text)) return true
+      const lead = text.split(/[\u4e00-\u9fff]/)[0]
+      return /(?:[A-Za-z][A-Za-z'’.\-]*\s+){3,}/.test(lead)
+        && (lead.match(/[A-Za-z]/g) || []).length > 40
+    }
+
     /** 展示用简介：命中缓存（名 + 原文一致）就用中文，否则用原文。 */
     function descriptionOf(item) {
       const hit = translations[item.name]
@@ -115,10 +132,9 @@ window.__ModuleLoader__.load({
       return { text: (transOn && zh) || item.description, zh, original: item.description }
     }
 
-    /** 待译：有原文、纯英文（没中文）、没缓存、没失败过。 */
+    /** 待译：英文主导/纯英文、没缓存、没失败过。 */
     function needTranslation(items) {
-      return items.filter((it) => it.description
-        && !/[\u4e00-\u9fff]/.test(it.description)
+      return items.filter((it) => needsTranslationText(it.description)
         && !(translations[it.name] && translations[it.name].source === it.description)
         && failed.get(it.name) !== it.description)
     }
@@ -128,7 +144,7 @@ window.__ModuleLoader__.load({
     async function startTranslate(items, force) {
       if (!transOn || !items.length) return
       let todo = force
-        ? items.filter((it) => it.description && !/[\u4e00-\u9fff]/.test(it.description))
+        ? items.filter((it) => needsTranslationText(it.description))
         : needTranslation(items)
       todo = todo.filter((it) => !translating.has(it.name))
       if (!todo.length) return
@@ -390,8 +406,10 @@ window.__ModuleLoader__.load({
         return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
       })
       const custom = [...new Set([...layout.cats, ...present])]
-        .filter((id) => id !== UNGROUPED && !RULE_BY_ID.has(id))
-      const ids = [...known, ...custom]
+        .filter((id) => id !== UNGROUPED && id !== BUILTIN && !RULE_BY_ID.has(id))
+      const ids = []
+      if (present.has(BUILTIN)) ids.push(BUILTIN)   // 自带插件单独一组，置顶
+      ids.push(...known, ...custom)
       if (present.has(UNGROUPED)) ids.push(UNGROUPED)
       return ids
     }
@@ -413,15 +431,18 @@ window.__ModuleLoader__.load({
     }
 
     /** 读官方卡片的真实状态：名称、简介、开关（aria-checked）、可开关性。
-     *  简介是 CardHead 的 span.cardDesc（CSS module 类名带 hash，用前缀匹配）；
-     *  官方没渲染简介时退到宿主读到的 profile 包简介，别让整列空着。 */
+     *  简介优先用宿主 descriptions[name]（与译文缓存同源、中文优先口径），官方
+     *  span.cardDesc 只在宿主没这个包的数据时兜底（自带 @deepseek-ai/ 包不在 profile）。
+     *  早先反过来「官方 DOM 优先」：官方卡片显示 package.json 的长英文 description，
+     *  与缓存 key（宿主口径）对不上，中文译文命中不了、中英混合串又免翻 —— 那两行
+     *  就一直露着英文。统一显示源 = 缓存 key 源，这处是根因修复。 */
     function readItems(body) {
       const items = []
       for (const li of body.querySelectorAll(CARD)) {
         const name = li.dataset.pluginPackage || li.dataset.pluginItem || ''
         if (!name) continue
-        const description = (li.querySelector('[class*="cardDesc"]')?.textContent?.trim()
-          || descriptions[name] || '').slice(0, 2000)
+        const domDesc = li.querySelector('[class*="cardDesc"]')?.textContent?.trim() || ''
+        const description = (descriptions[name] || domDesc).slice(0, 2000)
         const sw = li.querySelector('button[role="switch"],[role="switch"]')
         const enabled = sw ? sw.getAttribute('aria-checked') !== 'false' : null
         const switchable = Boolean(sw) && !sw.disabled
@@ -573,7 +594,9 @@ window.__ModuleLoader__.load({
 
       const enriched = items.map((item) => {
         const shown = descriptionOf(item)
-        const category = layout.assign[item.name] ?? autoCategoryOf(item.name, item.description)
+        // 手动指定优先；否则自带官方包单独一组，其余按关键词自动归类。
+        const category = layout.assign[item.name]
+          ?? (isBuiltin(item.name) ? BUILTIN : autoCategoryOf(item.name, item.description))
         const matches = !query
           || (item.name + ' ' + shown.text + ' ' + item.description).toLowerCase().includes(query)
           || titleOf(category).toLowerCase().includes(query)

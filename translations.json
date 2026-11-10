@@ -122,5 +122,13 @@
   "opencode2dsh": {
     "source": "Free OpenCode Zen models for DeepSeek Harness (DSH): native dsh-llm adapter plugin, no API key.",
     "text": "把 OpenCode Zen 的免费模型接入 DeepSeek Harness（DSH）：原生 dsh-llm 适配器插件，无需 API Key。"
+  },
+  "dsh-config-manager": {
+    "source": "Backup, restore, export, import, migrate and sync your DeepSeek Harness (DSH) configuration: settings, plugins, MCP servers, skills, agent presets and workspaces. One-click migration to another machine. DSH 配置一键备份、恢复、导出、导入、迁移与同步插件。",
+    "text": "DSH 配置一键备份、恢复、导出、导入、迁移与同步：涵盖设置、插件、MCP 服务、技能、Agent 预设与工作区，支持一键迁移到另一台机器。"
+  },
+  "dsh-sidebar-groups": {
+    "source": "Groups the DSH sidebar panel rows: two stay pinned, the rest fold under a collapsible Tools row, and rows can be dragged between the two groups. 侧边栏面板分组：两行常驻，其余收进可折叠的「工具」组，支持拖动互相搬运。",
+    "text": "DSH 侧边栏面板分组：两行常驻，其余收进可折叠的「工具」组，支持在两组之间拖动搬运。"
   }
 }

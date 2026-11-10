@@ -91,17 +91,22 @@ async function writeJson(file, value) {
 const readLayout = () => readJson(statePath('layout.json'), normalize)
 const writeLayout = (value) => writeJson(statePath('layout.json'), normalize(value))
 
-/** 状态目录里还没有译文时，用随包预置的中文译文初始化一次（人工校对过、不耗模型）。
- *  之后状态目录就是唯一真相源：翻过且原文没变的直接加载保存结果，不重翻。 */
+/** 状态目录是唯一真相源（用户后来翻的、原文变了重翻的都在这里）；随包预置的
+ *  中文译文作种子：首次运行整体初始化，之后只补齐种子里新增的条目 —— 插件升级
+ *  带来的新译文能平滑落进已有状态目录，不覆盖用户已存的结果。原文变了由客户端
+ *  检测 source 不一致后重翻，这里不掺和。 */
 const SEED = new URL('./translations.json', import.meta.url)
 async function readTranslations() {
   const file = statePath('translations.json')
   const saved = await readJson(file, normalizeTranslations)
-  if (Object.keys(saved).length) return saved
   try {
     const seed = normalizeTranslations(JSON.parse(await readFile(SEED, 'utf8')))
-    if (Object.keys(seed).length) { await writeJson(file, seed); return seed }
-  } catch { /* 没有种子：留给自动翻译 */ }
+    let added = 0
+    for (const [name, row] of Object.entries(seed)) {
+      if (!saved[name]) { saved[name] = row; added++ }
+    }
+    if (added) await writeJson(file, saved)
+  } catch { /* 没有种子：用状态目录里已有的 */ }
   return saved
 }
 const writeTranslations = (value) => writeJson(statePath('translations.json'), normalizeTranslations(value))
