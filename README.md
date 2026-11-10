@@ -13,11 +13,13 @@
 - **打开详情**：点插件名或行的空白处打开官方详情页；开关、分类按钮、手动徽标各管各的，不会被误触发。
 - **真实开关**：每行的开关直接调用官方 `pluginManager.setBundleEnabled`，与官方页永不打架；内核管理的行只标「内核」不提供开关。
 - **布局持久**：分类覆盖与顺序存在 `$DSH_HOME/dsh-installed-groups/layout.json`（真实文件，升级插件、清浏览器存储都不丢）；宿主半边未就绪时自动退回浏览器存储并在工具栏标注。
+- **简介中文翻译**：每行显示插件简介（官方卡片没渲染时退到 profile 包简介），英文简介自动译成简体中文并带「译」标记（悬停可见原文）。译文按「插件名 + 原文」存进 `$DSH_HOME/dsh-installed-groups/translations.json`：**翻过的直接加载保存结果，不再调模型**；只有原文变了（插件升级/换简介）才重翻。工具栏「中文 / 原文」一键切换显示（偏好存浏览器），「翻译简介」可手动重翻。翻译走宿主 `llm` 服务的当前默认模型、最低推理档，不接外部 API。
 
 ## 数据与边界
 
 - 清单与开关状态：官方 `pluginManager` Remote（`listBundles`），本视图不落任何副本。
 - 版本号：宿主半边读 `<profile>/node_modules/<包名>/package.json` 的 `version`（官方卡片 DOM 里没有版本信息），只读、不缓存、不改任何包。
+- 简介与译文：宿主半边额外读 `dsh.description`（优先）/`description`，`GET /installed-groups/layout` 一并返回；`POST` 同路由接收 `{items:[{name,text}]}`，用默认模型批量翻译后落盘 `translations.json`（原子写）。随包 `translations.json` 是人工校对过的中文种子，首次运行自动初始化状态目录，之后以状态目录为准。
 - 「已安装」口径：用户安装的 profile 包 + 随 dsh 发布的可选官方实验包；不可开关的内核基线行不显示。
 - 本插件不能在自己的界面里关掉自己（该行不出现开关）。
 
@@ -26,7 +28,7 @@
 **GitHub 直装（本仓库即发布渠道，未占 npm 包名）：**
 
 ```bash
-dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.2
+dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.3
 ```
 
 在 DSH 里也可让 Agent 用 `plugin_manager` 的 `install_bundle`，target 填上面 `github:` 开头的规格。装完重启 DSH 生效（宿主路由需要新进程；不重启也能用，只是分类暂存浏览器）。
@@ -41,8 +43,9 @@ dsh plugin --profile <你的 profile> add <本目录绝对路径>
 
 | 文件 | 作用 |
 |---|---|
-| `index.js` | 宿主半边：`GET/PUT /installed-groups/layout` 路由 + `layout.json` 读写（原子写） |
-| `client.js` | 页面半边：注册 `plugins.tab` 席位，渲染分类视图 |
+| `index.js` | 宿主半边：`GET/PUT/POST /installed-groups/layout` 路由 + `layout.json` / `translations.json` 读写（原子写）+ 简介翻译 |
+| `client.js` | 页面半边：原位增强官方 Installed 列表，渲染分类视图与中文译文 |
+| `translations.json` | 随包预置的中文译文种子（人工校对，首次运行初始化到状态目录） |
 | `cordis.patch.yml` | bundle 补丁层，插入宿主行 |
 
 插件是第三方代码：装前可自查源码并锁版本。

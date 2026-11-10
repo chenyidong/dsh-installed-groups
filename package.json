@@ -1,8 +1,8 @@
 {
   "name": "dsh-installed-groups",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
-  "description": "DSH 已安装插件原位分类视图：在官方 Installed 列表里自动归类 + 手动调整 + 搜索 + 一键缩放（折叠/密度），不开新标签页。",
+  "description": "DSH 已安装插件原位分类视图：自动归类 + 手动调整 + 搜索 + 一键缩放，插件简介自动译成中文并持久缓存。",
   "keywords": [
     "dsh-plugin",
     "dsh",
@@ -33,6 +33,7 @@
     "cordis.patch.yml",
     "icon.svg",
     "README.md",
+    "translations.json",
     "LICENSE"
   ],
   "dsh": {
@@ -45,7 +46,7 @@
       "inject": []
     },
     "displayName": "已安装插件分类视图",
-    "description": "在插件页新增一个标签：只列已安装插件，自动分类、可手动调整、支持搜索与一键缩放。",
+    "description": "已安装插件自动分类、手动调整、搜索、一键缩放，英文简介自动译成中文并持久缓存。",
     "icon": "./icon.svg"
   },
   "engines": {

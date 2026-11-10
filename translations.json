@@ -1,0 +1,126 @@
+{
+  "@liustack/modlens": {
+    "source": "Plug-in vision for text-only LLMs, powered by the free Antigravity CLI",
+    "text": "给纯文本大模型插上视觉能力：借免费 Antigravity CLI 读图，模型本身不用支持图片输入。"
+  },
+  "billion-context": {
+    "source": "A context-compression plugin — small context windows (a 100K context is enough), 5x fewer tokens, month-long single sessions (billions of tokens), and compression quality — for all agents: pi, OpenCode, Codex, Claude Code, and more. billion-context is all you need.",
+    "text": "上下文压缩插件：小窗口也够用（100K 即可）、token 省 5 倍、单会话可连续跑一个月（十亿级 token），且压缩质量不打折；适用于 pi、OpenCode、Codex、Claude Code 等各类 Agent。有 billion-context 就够了。"
+  },
+  "cc-safety-net": {
+    "source": "A coding agent CLI hook - block destructive commands and secret file access",
+    "text": "编码 Agent 的 CLI 钩子：拦截破坏性命令与对敏感文件的访问。"
+  },
+  "ds-harness-remote": {
+    "source": "P2P-based, end-to-end encrypted remote access to DeepSeek Harness, CodeX, Claude Code, Pi, and other workspaces from web and mobile clients.",
+    "text": "基于 P2P、端到端加密的远程访问：从网页和手机客户端连回 DeepSeek Harness、CodeX、Claude Code、Pi 等工作区。"
+  },
+  "dsh-always-on-top": {
+    "source": "A tiny pin button for the DSH Desktop title bar: click once to keep the window always on top.",
+    "text": "DSH 桌面标题栏上的小图钉：点一下让窗口始终置顶。"
+  },
+  "dsh-armory": {
+    "source": "Unified Skill + MCP + Expert + Plugin board for DeepSeek Harness (desktop app and Web GUI) — custom skill suites, skill install/uninstall with live refresh, global panel page, JSON import, WorkBuddy connector & SkillHub & Expert & DSH community plugin market installs, MCP OAuth authorization, tool-usage tailor with wire-tax trends, and profile-backed Host Remote management.",
+    "text": "DeepSeek Harness 统一的 Skill + MCP + Expert + 插件面板（桌面端与 Web GUI 均可用）：自定义技能套件、技能安装/卸载实时刷新、全局面板页、JSON 导入、WorkBuddy 连接器与 SkillHub / Expert / DSH 社区插件市场安装、MCP OAuth 授权、按 wire-tax 趋势裁剪工具用量，以及 profile 支撑的 Host Remote 管理。"
+  },
+  "dsh-better-sidebar": {
+    "source": "Better Sidebar for DSH — file tree, editor, changes, tasks and side chat in one column, separate for every conversation. Also exposes a service other plugins use to register sidebar tabs and file viewers.",
+    "text": "更好用的 DSH 侧栏：文件树、编辑器、改动、任务与侧边对话集中在一列，且每个会话各自独立；同时向其它插件提供注册侧栏标签页与文件查看器的服务。"
+  },
+  "dsh-chat-width-customizer": {
+    "source": "DSH web UI plugin: a session-header button that cycles the conversation width (748-1600px) by overriding the chat content-width CSS variables, so the chat column, composer, and user bubbles all widen together.",
+    "text": "DSH Web 界面插件：会话标题栏上的按钮循环切换对话宽度（748–1600px），改写聊天内容宽度 CSS 变量，让对话列、输入框与用户气泡一起变宽。"
+  },
+  "dsh-client-auto-continue": {
+    "source": "DSH Web UI plugin: automatically sends a localized continue prompt when a request is interrupted by network errors or other non-human causes",
+    "text": "DSH Web 界面插件：请求被网络错误等非人为原因中断时，自动补发一条本地化的「继续」提示。"
+  },
+  "dsh-composer-history": {
+    "source": "Terminal-style input history for the DeepSeek Harness web composer: edge-first arrows with exact draft/caret restore, browser-local persisted history, Ctrl+R reverse search, workspace-scoped recall, and fully configurable keys — plus sliding-context awareness (compaction summaries join recall/search, a compaction notice with one-click /compact fill) layered on the ordinary composer draft only.",
+    "text": "给 DSH 网页输入框加终端式输入历史：上下方向键优先在行首/行尾生效并精确还原草稿与光标、浏览器本地持久保存、Ctrl+R 反向搜索、按工作区召回、按键全可配；另有滑动上下文感知（压缩摘要并入召回/搜索、压缩提示可一键填入 /compact），只作用于普通输入框草稿。"
+  },
+  "dsh-computer-use-win": {
+    "source": "Windows computer use for DeepSeek Harness: an MCP stdio server + PowerShell UIA backend, bridged into DSH via @deepseek-ai/dsh-mcp-client. Read/act on real Windows desktop apps (UI Automation tree, screenshots, typed input, OCR, window management).",
+    "text": "DSH 的 Windows 桌面控制：MCP stdio 服务 + PowerShell UIA 后端，经 @deepseek-ai/dsh-mcp-client 接入 DSH。可读取并操作真实 Windows 桌面应用（UI 自动化树、截图、键入、OCR、窗口管理）。"
+  },
+  "dsh-context": {
+    "source": "A DeepSeek Harness plugin for context insight and management, with context dashboard and context command, for understanding how the context is made of, and how it evolves.",
+    "text": "DSH 上下文洞察与管理插件：上下文看板与 context 命令，帮你看清上下文由什么构成、又是怎么演变的。"
+  },
+  "dsh-database": {
+    "source": "DeepSeek Harness database plugin with session-scoped access, schema discovery and read-only queries for MySQL, MariaDB, PostgreSQL, SQL Server, Oracle and MongoDB.",
+    "text": "DSH 数据库插件：按会话隔离访问，支持库表结构发现与只读查询，覆盖 MySQL、MariaDB、PostgreSQL、SQL Server、Oracle 和 MongoDB。"
+  },
+  "dsh-deepseek-chat": {
+    "source": "CHAT / HARNESS mode switcher for DeepSeek Harness",
+    "text": "DSH 的 CHAT / HARNESS 模式切换器。"
+  },
+  "dsh-find-bar": {
+    "source": "DSH web plugin: a Cmd/Ctrl+F find bar (like the browser's built-in find) for the desktop Electron shell, which has none. Centre/right segmented scope picker (hidden while the right column is collapsed), collapsed regions skipped and re-added on expand, with highlight-all, match count, and Enter/Shift+Enter navigation.",
+    "text": "DSH 网页插件：给没有查找功能的 Electron 桌面壳加 Cmd/Ctrl+F 查找条（仿浏览器内置）。中间/右侧分段范围选择器（右栏折叠时隐藏），折叠区域跳过并在展开后重新纳入，支持全部高亮、命中计数、Enter/Shift+Enter 跳转。"
+  },
+  "dsh-find-plugins": {
+    "source": "Find DSH plugins across five community catalogs plus live GitHub and npm search, ranked by relevance × trust × freshness × popularity — not stars alone.",
+    "text": "跨五个社区目录以及 GitHub、npm 实时搜索 DSH 插件，按相关度 × 可信度 × 新鲜度 × 热度排序，不只看星标。"
+  },
+  "dsh-footer-inline": {
+    "source": "Mirror DeepSeek Harness sidebar footer actions into the global panel list as native-looking rows.",
+    "text": "把 DSH 侧栏底部的快捷操作镜像到全局面板列表，渲染成原生样式的行。"
+  },
+  "dsh-genui": {
+    "source": "GenUI for DeepSeek Harness: interactive charts, forms, calculators, dashboards, and mini apps rendered inline in assistant replies, with actions that flow back to the model.",
+    "text": "DSH 的 GenUI：在助手回复里内联渲染交互式图表、表单、计算器、看板与小应用，操作结果可回流给模型。"
+  },
+  "dsh-github-link": {
+    "source": "Hover cards for GitHub / GitLab / Gitee URLs plus click-to-open in the DSH sidebar browser, scoped to the conversation transcript (GenUI blocks included).",
+    "text": "对话记录（含 GenUI 块）里 GitHub / GitLab / Gitee 链接的悬浮卡片，点击可在 DSH 侧栏浏览器中打开。"
+  },
+  "dsh-global-todo": {
+    "source": "Cross-session todo list for DeepSeek Harness where an agent\"s \"done\" never settles itself — the record waits in Needs review until a person confirms it. Built for a phone: the panel measures its own width, folds on scroll and keeps 44px touch targets. One JSON file both sides write, numbered step hand-offs, session read-back, and two machines folding one list through a shared directory.",
+    "text": "DSH 跨会话待办清单：Agent 标记的「完成」不会自己生效，记录会停在「待确认」等人点头。为手机设计：面板自测宽度、滚动时折叠、保持 44px 触控目标。两端共写一个 JSON 文件，编号步骤交接、会话回读，两台机器通过共享目录合并同一份清单。"
+  },
+  "dsh-mask": {
+    "source": "PII masking middleware for DeepSeek Harness: regex-detect and replace phones, emails, ID cards, bank cards, keys, and (opt-in) IPs with placeholders before they reach the model, keep the restore table host-side (memory plus a controlled storage domain, never the session log) with the /mask restore command and the exported RestoreStore seam, and expose /mask status and the mask_test tool. Name and address recognition needs an external NER recognizer, which this pure-host form does not bundle: mode \"regex+ner\" and the person/address entities fail loudly at load. The phone and ID-card detectors match mainland-China formats only.",
+    "text": "DSH 的 PII 脱敏中间件：在内容送达模型前用正则识别并替换手机号、邮箱、身份证、银行卡、密钥及（可选）IP 为占位符；还原表留在宿主侧（内存 + 受控存储域，绝不进会话日志），提供 /mask restore 命令与导出的 RestoreStore 接口，以及 /mask status 和 mask_test 工具。人名/地址识别需要外部 NER，本纯宿主形态未内置：mode \"regex+ner\" 与人名/地址实体会在加载时明确报错。手机号与身份证检测器仅匹配中国大陆格式。"
+  },
+  "dsh-mnemon": {
+    "source": "Composable, view-based context for DeepSeek Harness. Pluggable sources and strategies, with layered memory and self-evolving skills out of the box.",
+    "text": "DSH 可组合、基于视图的上下文：可插拔的数据源与策略，开箱即带分层记忆与自演进技能。"
+  },
+  "dsh-mobile-plugin": {
+    "source": "Mobile API (/api/mobile/v1) and relay client for the DSH mobile app — desktop profile build (dsh 0.2.x, peers resolved by the host)",
+    "text": "DSH 手机端 App 的 Mobile API（/api/mobile/v1）与中继客户端 —— 桌面 profile 构建（dsh 0.2.x，peer 依赖由宿主解析）。"
+  },
+  "dsh-nav-fold": {
+    "source": "DSH sidebar folding, customizable shortcut-driven focus navigation and workspace tabs; macOS-only logo hiding adapted from stoner-byte/dsh-hide-brand (MIT)",
+    "text": "DSH 侧栏折叠、可自定义快捷键的焦点导航与工作区标签页；另有仅在 macOS 生效的 logo 隐藏（改自 stoner-byte/dsh-hide-brand，MIT）。"
+  },
+  "dsh-ofm-model-list": {
+    "source": "Show Our Free Model catalog grouped like the custom list inside Settings > Models",
+    "text": "按「设置 > 模型」里自定义列表的分组方式展示 Our Free Model 模型目录。"
+  },
+  "dsh-ops": {
+    "source": "Native file and PTC tools for DSH on Windows x64, Linux x64 and macOS arm64/x64; Windows-only optional Bash payload and host PowerShell integration",
+    "text": "DSH 原生文件与 PTC 工具，支持 Windows x64、Linux x64、macOS arm64/x64；含仅 Windows 的可选 Bash 负载与宿主 PowerShell 集成。"
+  },
+  "dsh-recovery-resume": {
+    "source": "DSH host plugin: resumes turns interrupted by a host restart, requiring the agent to verify real-world state before continuing",
+    "text": "DSH 宿主插件：宿主重启导致回合中断后自动续跑，并要求 Agent 先核实真实世界状态再继续。"
+  },
+  "dsh-right-pane-demo": {
+    "source": "Intercept top-left global panel clicks and render the clicked plugin's real page in the coloured right sidebar.",
+    "text": "拦截左上角全局面板的点击，把被点插件的真实页面渲染到右侧彩色 sidebar 中。"
+  },
+  "dsh-skill-picker": {
+    "source": "DSH Web GUI skill picker: a button beside the composer opens a searchable list of installed skills; picking one inserts the official `/skill-name` gesture into the input box, so the skill loads with your message (WorkBuddy-style skill invocation for DeepSeek Harness).",
+    "text": "DSH Web GUI 技能选择器：输入框旁的按钮打开可搜索的已装技能列表；选中后把官方 /技能名 手势插入输入框，随消息一起发出即加载该技能（WorkBuddy 式的 DSH 技能调用）。"
+  },
+  "dsh-xdpool": {
+    "source": "One DSH model pool for every free quota you have: merge all locally signed-in WorkBuddy accounts with auto-failover, sign in to 13 vendors by QR/web, aggregate 76 vendors' free tiers, plus a usage dashboard, model routing, a local OpenAI-compatible gateway and a points-automation suite.",
+    "text": "把你所有免费额度汇成一个 DSH 模型池：合并本机已登录的 WorkBuddy 账号并自动故障转移，扫码/网页登录 13 家厂商，聚合 76 家厂商的免费档，另有用量看板、模型路由、本地 OpenAI 兼容网关与积分自动化套件。"
+  },
+  "opencode2dsh": {
+    "source": "Free OpenCode Zen models for DeepSeek Harness (DSH): native dsh-llm adapter plugin, no API key.",
+    "text": "把 OpenCode Zen 的免费模型接入 DeepSeek Harness（DSH）：原生 dsh-llm 适配器插件，无需 API Key。"
+  }
+}

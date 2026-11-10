@@ -7,8 +7,10 @@
  * 官方 React 怎么重建都不影响我们——它从不知道自己的卡片被 CSS 藏起来了。
  *
  * 功能：自动分类（RULES 关键词）+ 手动调整（拖到 chip / 行内下拉）+ 搜索 +
- * 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类。开关/详情/卸载走官方。
- * 布局存宿主半边 /installed-groups/layout（$DSH_HOME 文件），没挂上退回 localStorage。
+ * 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类 + 简介中文翻译。
+ * 开关/详情/卸载走官方。布局与译文都存宿主半边 /installed-groups/layout
+ * （$DSH_HOME 文件），没挂上退回 localStorage。译文按「插件名 + 原文」缓存，
+ * 翻过的直接加载保存结果，只有原文变了才重翻。
  */
 window.__ModuleLoader__.load({
   id: 'dsh-installed-groups',
@@ -20,6 +22,7 @@ window.__ModuleLoader__.load({
     const LAYOUT_STORE = 'dsh-installed-groups.layout.v1'
     const DENSITY_STORE = 'dsh-installed-groups.density.v1'
     const UNGROUPED = '__other__'
+    const TRANS_ON_STORE = 'dsh-installed-groups.trans.v1'
 
     /** 自动分类规则：按序匹配，第一条命中定类。匹配包名或简介（中英皆宜）。 */
     const RULES = [
@@ -83,6 +86,9 @@ window.__ModuleLoader__.load({
           if (body?.ok && body.layout) {
             storageMode = 'file'
             versions = body.versions ?? {}
+            descriptions = body.descriptions ?? {}
+            translations = body.translations ?? {}
+            failed.clear()
             const file = normalizeLayout(body.layout)
             // 迁移：宿主文件是空的而浏览器里有旧数据（路由挂载前手动归的类）
             // → 把 localStorage 那份接过来并落盘，别让重启抹掉手动分类。
@@ -98,6 +104,69 @@ window.__ModuleLoader__.load({
       } catch { /* 路由未挂载 */ }
       storageMode = 'local'
       return readLocal() ?? normalizeLayout(null)
+    }
+
+    /* ------------------------------------------------------------------ 翻译 */
+
+    /** 展示用简介：命中缓存（名 + 原文一致）就用中文，否则用原文。 */
+    function descriptionOf(item) {
+      const hit = translations[item.name]
+      const zh = hit && hit.source === item.description ? hit.text : ''
+      return { text: (transOn && zh) || item.description, zh, original: item.description }
+    }
+
+    /** 待译：有原文、纯英文（没中文）、没缓存、没失败过。 */
+    function needTranslation(items) {
+      return items.filter((it) => it.description
+        && !/[\u4e00-\u9fff]/.test(it.description)
+        && !(translations[it.name] && translations[it.name].source === it.description)
+        && failed.get(it.name) !== it.description)
+    }
+
+    /** 把未翻的英文简介交给宿主（宿主按「名 + 原文」落盘，翻过的直接返回缓存）。
+     *  分批翻译，单批失败只影响那一批；没拿到译文的记进 failed，不无限重试。 */
+    async function startTranslate(items, force) {
+      if (!transOn || !items.length) return
+      let todo = force
+        ? items.filter((it) => it.description && !/[\u4e00-\u9fff]/.test(it.description))
+        : needTranslation(items)
+      todo = todo.filter((it) => !translating.has(it.name))
+      if (!todo.length) return
+      todo.forEach((it) => translating.add(it.name))
+      translateError = ''
+      scheduleReconcile()
+      try {
+        const res = await fetch(LAYOUT_ROUTE, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ items: todo.map((it) => ({ name: it.name, text: it.description })) }),
+        })
+        const body = await res.json()
+        const got = body?.ok && body.translations ? body.translations : {}
+        translations = { ...translations, ...got }
+        for (const it of todo) {
+          if (!got[it.name]) failed.set(it.name, it.description)
+          translating.delete(it.name)
+        }
+        if (body?.error) translateError = body.error
+      } catch {
+        for (const it of todo) { failed.set(it.name, it.description); translating.delete(it.name) }
+      }
+      scheduleReconcile()
+    }
+
+    /** 页面加载/刷新时自动补齐未翻的简介；translateQueued 防 700ms 轮询重入。 */
+    function queueTranslate(items) {
+      if (translateQueued || !transOn || storageMode !== 'file') return
+      const pending = needTranslation(items)
+      if (!pending.length) return
+      translateQueued = true
+      if (translateTimer) clearTimeout(translateTimer)
+      translateTimer = setTimeout(async () => {
+        translateTimer = 0
+        await startTranslate(pending, false)
+        translateQueued = false
+      }, 400)
     }
 
     let saveTimer = 0
@@ -220,6 +289,8 @@ window.__ModuleLoader__.load({
 .ig-ver { font-size:11px; font-weight:500; color:var(--dsw-alias-label-secondary); opacity:.8; flex:none; }
 .ig-name:hover { color:var(--dsw-alias-brand-primary); text-decoration:underline; }
 .ig-desc { font-size:12px; color:var(--dsw-alias-label-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ig-trans-mark { font-style:normal; margin-left:6px; padding:0 3px; border-radius:4px; font-size:10px;
+  border:1px solid var(--dsw-alias-border-l1); color:var(--dsw-alias-label-secondary); }
 .ig-tag { font-size:11px; padding:1px 7px; border-radius:9px; border:1px solid var(--dsw-alias-border-l1);
   color:var(--dsw-alias-label-secondary); flex:none; cursor:pointer; }
 .ig-tag.is-manual { color:var(--dsw-alias-brand-primary); border-color:var(--dsw-alias-brand-primary); }
@@ -270,6 +341,21 @@ window.__ModuleLoader__.load({
     /** 插件名 → 版本号，由宿主半边跟着布局一起给（官方卡片 DOM 里没有版本）。
      *  取不到就是空表，列表照常显示，只是没有版本号。 */
     let versions = {}
+
+    /** 插件名 → { source, text } 中文译文：宿主 translations.json 缓存，翻过的直接用。 */
+    let translations = {}
+    /** 官方卡片没给简介时，用宿主读到的 profile 包简介兜底。 */
+    let descriptions = {}
+    /** 翻译失败的「插件名 → 原文」：不再自动重试，避免轮询反复调模型。 */
+    const failed = new Map()
+    /** 正在后台翻译的插件名。 */
+    const translating = new Set()
+    let translateError = ''
+    let translateQueued = false
+    let translateTimer = 0
+    let transOn = (() => {
+      try { return window.localStorage.getItem(TRANS_ON_STORE) !== 'off' } catch { return true }
+    })()
 
     /** 每个插件页实例一份视图（侧栏 + 中心区同开不串台）。 */
     const views = new WeakMap()
@@ -327,13 +413,15 @@ window.__ModuleLoader__.load({
     }
 
     /** 读官方卡片的真实状态：名称、简介、开关（aria-checked）、可开关性。
-     *  简介是 CardHead 的 span.cardDesc（CSS module 类名带 hash，用前缀匹配）。 */
+     *  简介是 CardHead 的 span.cardDesc（CSS module 类名带 hash，用前缀匹配）；
+     *  官方没渲染简介时退到宿主读到的 profile 包简介，别让整列空着。 */
     function readItems(body) {
       const items = []
       for (const li of body.querySelectorAll(CARD)) {
         const name = li.dataset.pluginPackage || li.dataset.pluginItem || ''
         if (!name) continue
-        const description = li.querySelector('[class*="cardDesc"]')?.textContent?.trim() ?? ''
+        const description = (li.querySelector('[class*="cardDesc"]')?.textContent?.trim()
+          || descriptions[name] || '').slice(0, 2000)
         const sw = li.querySelector('button[role="switch"],[role="switch"]')
         const enabled = sw ? sw.getAttribute('aria-checked') !== 'false' : null
         const switchable = Boolean(sw) && !sw.disabled
@@ -431,7 +519,29 @@ window.__ModuleLoader__.load({
       const chips = document.createElement('span')
       chips.className = 'ig-chips'
       chips.style.cssText = 'display:contents'
-      bar.append(search, collapseAll, densityBtn, newCat, note, chips)
+      const transBtn = document.createElement('button')
+      transBtn.className = 'ig-btn ig-trans-toggle'
+      transBtn.type = 'button'
+      transBtn.title = '切换中文译文 / 英文原文'
+      transBtn.textContent = transOn ? '原文' : '中文'
+      transBtn.addEventListener('click', () => {
+        transOn = !transOn
+        try { window.localStorage.setItem(TRANS_ON_STORE, transOn ? 'on' : 'off') } catch { /* ignore */ }
+        transBtn.textContent = transOn ? '原文' : '中文'
+        view._sig = ''
+        refreshView(view, body, true)
+      })
+      const translateBtn = document.createElement('button')
+      translateBtn.className = 'ig-btn ig-translate'
+      translateBtn.type = 'button'
+      translateBtn.title = '把英文简介译成中文并保存；已译过的直接加载缓存'
+      translateBtn.textContent = '翻译简介'
+      translateBtn.addEventListener('click', () => {
+        failed.clear()
+        translateError = ''
+        startTranslate(readItems(body), true)
+      })
+      bar.append(search, collapseAll, densityBtn, transBtn, translateBtn, newCat, note, chips)
 
       const list = document.createElement('div')
       list.className = 'ig-list'
@@ -462,12 +572,14 @@ window.__ModuleLoader__.load({
       const query = (view._bar.querySelector('.ig-q')?.value ?? '').trim().toLowerCase()
 
       const enriched = items.map((item) => {
+        const shown = descriptionOf(item)
         const category = layout.assign[item.name] ?? autoCategoryOf(item.name, item.description)
         const matches = !query
-          || `${item.name} ${item.description}`.toLowerCase().includes(query)
+          || (item.name + ' ' + shown.text + ' ' + item.description).toLowerCase().includes(query)
           || titleOf(category).toLowerCase().includes(query)
-        return { ...item, category, manual: Boolean(layout.assign[item.name]), matches }
+        return { ...item, shown, category, manual: Boolean(layout.assign[item.name]), matches }
       })
+      queueTranslate(items)
       const counts = new Map()
       for (const item of enriched) counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
       const ids = orderedCategories(new Set(enriched.map((item) => item.category)))
@@ -475,10 +587,10 @@ window.__ModuleLoader__.load({
       // 内容没变就整段跳过重建：重建会换掉所有节点，正好落在 mousedown 与
       // mouseup 之间时 click 根本不会触发 —— 「开关点了没反应」大多是这个。
       const sig = JSON.stringify([
-        query,
+        query, transOn, translateError, translating.size,
         ids.map((id) => [id, collapsed.has(id), counts.get(id) ?? 0]),
         enriched.map((item) => [
-          item.name, item.description, item.enabled, item.switchable,
+          item.name, item.description, item.shown.text, item.enabled, item.switchable,
           item.version, item.category, item.manual, item.waiting,
         ]),
       ])
@@ -530,7 +642,18 @@ window.__ModuleLoader__.load({
       view._list.replaceChildren(...nodes)
 
       const note = view._bar.querySelector('.ig-note')
-      note.textContent = `${items.length} 个插件${storageMode === 'local' ? ' · 暂存:浏览器' : ''}`
+      const zhCount = items.filter((it) => translations[it.name] && translations[it.name].source === it.description).length
+      const pending = needTranslation(items).length
+      note.textContent = items.length + ' 个插件'
+        + (transOn ? ' · 中文 ' + zhCount : '')
+        + (translating.size ? ' · 翻译中 ' + translating.size : '')
+        + (pending && transOn && storageMode === 'file' ? ' · 待译 ' + pending : '')
+        + (translateError ? ' · ' + translateError : '')
+        + (storageMode === 'local' ? ' · 暂存:浏览器' : '')
+      view._bar.querySelector('.ig-trans-toggle').textContent = transOn ? '原文' : '中文'
+      const translateBtn = view._bar.querySelector('.ig-translate')
+      translateBtn.disabled = translating.size > 0
+      translateBtn.textContent = translating.size ? '翻译中…' : '翻译简介'
     }
 
     /** 一行插件：名称（点击=打开官方详情）、简介、手动徽标、换类下拉、开关（代理官方）。 */
@@ -571,8 +694,18 @@ window.__ModuleLoader__.load({
 
       const desc = document.createElement('span')
       desc.className = 'ig-desc'
-      desc.textContent = item.description
-      desc.title = item.description
+      if (item.shown.zh && transOn) {
+        desc.append(document.createTextNode(item.shown.text))
+        const mark = document.createElement('i')
+        mark.className = 'ig-trans-mark'
+        mark.textContent = '译'
+        mark.title = '原文：' + item.shown.original
+        desc.append(mark)
+        desc.title = item.shown.text + '\n\n原文：' + item.shown.original
+      } else {
+        desc.textContent = item.shown.text
+        desc.title = item.shown.text
+      }
 
       const tag = document.createElement('span')
       tag.className = `ig-tag${item.manual ? ' is-manual' : ''}`
