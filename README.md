@@ -8,6 +8,7 @@
 - **手动调整**：把插件行**拖**进任何分类，或用行内下拉换类；被手动挪过的行标「手动」徽标，点 `↺` 恢复自动跟随规则。改规则不影响手动行，没手动过的行会随规则自动重排。
 - **自定义分类**：工具栏「＋ 新分类」建空组（可以先建后拖），自定义组支持改名；空组可删除。拖动**分类标题**可调整分类显示顺序。
 - **搜索**：按插件名、描述、分类名实时过滤；搜索时自动展开命中分类并显示 `命中/总数`。
+- **版本号**：每行插件名后面跟当前装着的版本（如 `v0.30.1`）；来源是 profile 的 `node_modules`，npm / GitHub / 本地目录装的都读得到，读不到就只显示名字。
 - **一键缩放**：`△ 全部折叠 / ▽ 全部展开` 一键切换所有分类；`密度：舒适 ⇄ 紧凑` 一键切换行高密度（紧凑隐藏描述、行距减半），偏好持久保存。
 - **真实开关**：每行的开关直接调用官方 `pluginManager.setBundleEnabled`，与官方页永不打架；内核管理的行只标「内核」不提供开关。
 - **布局持久**：分类覆盖与顺序存在 `$DSH_HOME/dsh-installed-groups/layout.json`（真实文件，升级插件、清浏览器存储都不丢）；宿主半边未就绪时自动退回浏览器存储并在工具栏标注。
@@ -15,6 +16,7 @@
 ## 数据与边界
 
 - 清单与开关状态：官方 `pluginManager` Remote（`listBundles`），本视图不落任何副本。
+- 版本号：宿主半边读 `<profile>/node_modules/<包名>/package.json` 的 `version`（官方卡片 DOM 里没有版本信息），只读、不缓存、不改任何包。
 - 「已安装」口径：用户安装的 profile 包 + 随 dsh 发布的可选官方实验包；不可开关的内核基线行不显示。
 - 本插件不能在自己的界面里关掉自己（该行不出现开关）。
 
@@ -23,7 +25,7 @@
 **GitHub 直装（本仓库即发布渠道，未占 npm 包名）：**
 
 ```bash
-dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.0
+dsh plugin --profile <你的 profile> add github:chenyidong/dsh-installed-groups#v0.1.1
 ```
 
 在 DSH 里也可让 Agent 用 `plugin_manager` 的 `install_bundle`，target 填上面 `github:` 开头的规格。装完重启 DSH 生效（宿主路由需要新进程；不重启也能用，只是分类暂存浏览器）。

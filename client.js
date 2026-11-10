@@ -82,6 +82,7 @@ window.__ModuleLoader__.load({
           const body = await res.json()
           if (body?.ok && body.layout) {
             storageMode = 'file'
+            versions = body.versions ?? {}
             const file = normalizeLayout(body.layout)
             // 迁移：宿主文件是空的而浏览器里有旧数据（路由挂载前手动归的类）
             // → 把 localStorage 那份接过来并落盘，别让重启抹掉手动分类。
@@ -214,7 +215,9 @@ window.__ModuleLoader__.load({
 .ig-main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:3px; }
 .ig-compact .ig-row { padding:5px 14px; }
 .ig-compact .ig-desc { display:none; }
-.ig-name { font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ig-name { font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto; }
+.ig-main-head { display:flex; align-items:center; gap:6px; min-width:0; }
+.ig-ver { font-size:11px; font-weight:500; color:var(--dsw-alias-label-secondary); opacity:.8; flex:none; }
 .ig-name:hover { color:var(--dsw-alias-brand-primary); text-decoration:underline; }
 .ig-desc { font-size:12px; color:var(--dsw-alias-label-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ig-tag { font-size:11px; padding:1px 7px; border-radius:9px; border:1px solid var(--dsw-alias-border-l1);
@@ -240,6 +243,11 @@ window.__ModuleLoader__.load({
 .ig-switch[data-on="true"] i { left:18px; }
 .ig-switch[data-on="false"] { background:var(--dsw-alias-state-idle-primary); }
 .ig-switch:disabled { opacity:.45; cursor:default; }
+/* 开关等待宿主确认时的转圈：贴在开关左侧，尺寸与徽标一致，不挤压行高。 */
+.ig-spin { width:12px; height:12px; flex:none; box-sizing:border-box; border-radius:50%;
+  border:2px solid var(--dsw-alias-state-idle-primary); border-top-color:var(--dsw-alias-label-secondary);
+  animation:ig-rotate .7s linear infinite; }
+@keyframes ig-rotate { to { transform:rotate(360deg); } }
 `
 
     /* ---------------------------------------------------------------- reconcile */
@@ -259,8 +267,29 @@ window.__ModuleLoader__.load({
       try { return window.localStorage.getItem(DENSITY_STORE) === 'compact' ? 'compact' : 'comfortable' } catch { return 'comfortable' }
     })()
 
+    /** 插件名 → 版本号，由宿主半边跟着布局一起给（官方卡片 DOM 里没有版本）。
+     *  取不到就是空表，列表照常显示，只是没有版本号。 */
+    let versions = {}
+
     /** 每个插件页实例一份视图（侧栏 + 中心区同开不串台）。 */
     const views = new WeakMap()
+
+    /** 点过开关、还在等宿主确认的插件：插件名 → { on: 期望状态, until: 放弃时刻 }。
+     *  官方的启用/停用要写 profile patch 再重载 Loader，慢的时候好几秒；这期间
+     *  给开关加转圈并锁住，别让人以为没点上而反复点。 */
+    const pending = new Map()
+    let fastTimer = 0
+
+    /** 有开关在等结果时改用 150ms 快轮询，确认到位后自动停，不留后台噪音。 */
+    function waitPending() {
+      if (fastTimer) return
+      fastTimer = setInterval(() => {
+        const now = Date.now()
+        for (const [name, wait] of pending) if (now > wait.until) pending.delete(name)
+        if (!pending.size) { clearInterval(fastTimer); fastTimer = 0; return }
+        scheduleReconcile()
+      }, 150)
+    }
 
     function scheduleReconcile() {
       if (reconcileTimer) return
@@ -308,7 +337,13 @@ window.__ModuleLoader__.load({
         const sw = li.querySelector('button[role="switch"],[role="switch"]')
         const enabled = sw ? sw.getAttribute('aria-checked') !== 'false' : null
         const switchable = Boolean(sw) && !sw.disabled
-        items.push({ name, description, enabled, switchable, source: li })
+        // 官方状态追上了期望值（或等太久）就撤掉等待标记
+        const wait = pending.get(name)
+        if (wait && (enabled === wait.on || Date.now() > wait.until)) pending.delete(name)
+        items.push({
+          name, description, enabled, switchable,
+          version: versions[name] ?? '', waiting: pending.has(name),
+        })
       }
       return items
     }
@@ -437,6 +472,19 @@ window.__ModuleLoader__.load({
       for (const item of enriched) counts.set(item.category, (counts.get(item.category) ?? 0) + 1)
       const ids = orderedCategories(new Set(enriched.map((item) => item.category)))
 
+      // 内容没变就整段跳过重建：重建会换掉所有节点，正好落在 mousedown 与
+      // mouseup 之间时 click 根本不会触发 —— 「开关点了没反应」大多是这个。
+      const sig = JSON.stringify([
+        query,
+        ids.map((id) => [id, collapsed.has(id), counts.get(id) ?? 0]),
+        enriched.map((item) => [
+          item.name, item.description, item.enabled, item.switchable,
+          item.version, item.category, item.manual, item.waiting,
+        ]),
+      ])
+      if (view._sig === sig) return
+      view._sig = sig
+
       updateChips(view, ids, counts)
 
       // 列表：整段重建（都是我们自己的节点，重建成本极低且无 React 纠纷）。
@@ -487,6 +535,10 @@ window.__ModuleLoader__.load({
 
     /** 一行插件：名称（点击=打开官方详情）、简介、手动徽标、换类下拉、开关（代理官方）。 */
     function rowNode(view, body, item, ids) {
+      // 每次都按名字回官方 DOM 现取卡片：列表不重建时手上那份可能已被 React 换掉，
+      // 对着脱离文档的旧节点 .click() 是不响的 —— 这正是「点了没反应」的一半原因。
+      const card = () => [...body.querySelectorAll(CARD)]
+        .find((el) => (el.dataset.pluginPackage || el.dataset.pluginItem) === item.name) ?? null
       const row = document.createElement('div')
       row.className = 'ig-row'
       row.draggable = true
@@ -501,7 +553,7 @@ window.__ModuleLoader__.load({
       name.addEventListener('click', () => {
         // 打开官方详情：卡片虽被 CSS 隐藏，.click() 仍会派发到 React 处理器。
         // 标题是 CardHead 里的可点元素：优先非开关的按钮，兜底点卡片本身。
-        const card = item.source.isConnected ? item.source : null
+        const card = card()
         if (!card) return
         const target = [...card.querySelectorAll('button')].find((btn) => btn.getAttribute('role') !== 'switch')
         if (target) target.click()
@@ -532,28 +584,50 @@ window.__ModuleLoader__.load({
       sw.className = 'ig-switch'
       sw.type = 'button'
       sw.append(document.createElement('i'))
-      if (item.switchable && item.enabled !== null) {
+      if (item.switchable && item.enabled !== null && !item.waiting) {
         sw.dataset.on = String(item.enabled)
         sw.title = item.enabled ? '点击停用' : '点击启用'
         sw.addEventListener('click', () => {
-          const official = item.source.isConnected
-            ? item.source.querySelector('button[role="switch"],[role="switch"]')
-            : null
-          if (official && !official.disabled) official.click()
-          // 官方状态变化由下一轮轮询/操作反馈刷新
+          const official = card()?.querySelector('button[role="switch"],[role="switch"]')
+          // 官方那一下没点出去（卡片没找到/按钮正忙）就别装作在切
+          if (!official || official.disabled) { scheduleReconcile(); return }
+          official.click()
+          // 先记下期望状态：确认前开关锁住并转圈，快轮询盯着官方 aria-checked
+          pending.set(item.name, { on: !item.enabled, until: Date.now() + 8000 })
+          waitPending()
           scheduleReconcile()
         })
       } else {
         sw.disabled = true
         sw.dataset.on = String(item.enabled ?? false)
-        sw.title = item.enabled === null ? '这一行没有开关（内核管理或尚未加载）' : '当前不可切换'
+        sw.title = item.waiting
+          ? '正在切换，等宿主确认…'
+          : item.enabled === null ? '这一行没有开关（内核管理或尚未加载）' : '当前不可切换'
       }
 
-      // 名称+简介竖排两行：左列 .ig-main，右侧徽标/分类按钮/开关。
+      // 名称行（含版本号，同行）+ 简介一行，竖排：左列 .ig-main，右侧徽标/分类按钮/开关。
       const main = document.createElement('div')
       main.className = 'ig-main'
-      main.append(name, desc)
-      row.append(main, tag, btn, sw)
+      const head = document.createElement('div')
+      head.className = 'ig-main-head'
+      head.append(name)
+      if (item.version) {
+        const ver = document.createElement('span')
+        ver.className = 'ig-ver'
+        ver.textContent = `v${item.version}`
+        ver.title = `当前版本 ${item.version}`
+        head.append(ver)
+      }
+      main.append(head, desc)
+      row.append(main, tag, btn)
+      // 切换进行中：开关左边挂一个转圈，让「点上了」这件事立刻可见。
+      if (item.waiting) {
+        const spin = document.createElement('span')
+        spin.className = 'ig-spin'
+        spin.title = '正在切换，等宿主确认…'
+        row.append(spin)
+      }
+      row.append(sw)
       return row
     }
 
@@ -707,7 +781,7 @@ window.__ModuleLoader__.load({
 
     return {
       inject: [],
-      apply() {
+      apply(ctx) {
         if (started) return
         started = true
         window[TOKEN_KEY] = MY_TOKEN // 接管：旧实例的下一轮 reconcile 自动停摆
@@ -716,7 +790,7 @@ window.__ModuleLoader__.load({
         styleTag.setAttribute('data-installed-groups', 'base')
         styleTag.textContent = STYLE
         document.head.append(styleTag)
-        loadLayout().then((loaded) => { layout = loaded })
+        loadLayout().then((loaded) => { layout = loaded; scheduleReconcile() })
         reconcileAll()
         pollTimer = setInterval(reconcileAll, 700)
       },
