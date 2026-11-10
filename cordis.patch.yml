@@ -1,0 +1,7 @@
+# Bundle patch layer: the host half owns the layout file and serves it over a
+# same-origin route; `dsh.client` in package.json loads ./client.js as the
+# browser half that registers the `plugins.tab` seat.
+- insert:
+    - id: dsh-installed-groups
+      name: dsh-installed-groups
+      config: {}

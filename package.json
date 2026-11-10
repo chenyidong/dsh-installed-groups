@@ -1,0 +1,54 @@
+{
+  "name": "dsh-installed-groups",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DSH 已安装插件原位分类视图：在官方 Installed 列表里自动归类 + 手动调整 + 搜索 + 一键缩放（折叠/密度），不开新标签页。",
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "deepseek-harness",
+    "plugin-manager",
+    "categories",
+    "ui"
+  ],
+  "license": "MIT",
+  "author": "chenyidong",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chenyidong/dsh-installed-groups.git"
+  },
+  "homepage": "https://github.com/chenyidong/dsh-installed-groups#readme",
+  "bugs": {
+    "url": "https://github.com/chenyidong/dsh-installed-groups/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    },
+    "displayName": "已安装插件分类视图",
+    "description": "在插件页新增一个标签：只列已安装插件，自动分类、可手动调整、支持搜索与一键缩放。",
+    "icon": "./icon.svg"
+  },
+  "engines": {
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  }
+}
