@@ -1,6 +1,6 @@
 {
   "name": "dsh-installed-groups",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "description": "DSH 已安装插件原位分类视图：自动归类 + 手动调整 + 搜索 + 一键缩放，插件简介自动译成中文并持久缓存。",
   "keywords": [

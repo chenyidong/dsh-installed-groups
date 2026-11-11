@@ -353,6 +353,11 @@ window.__ModuleLoader__.load({
     let density = (() => {
       try { return window.localStorage.getItem(DENSITY_STORE) === 'compact' ? 'compact' : 'comfortable' } catch { return 'comfortable' }
     })()
+    // 自带插件默认合并成一组；点工具栏可改成按名称/简介自动分到 10 类。
+    const BUILTIN_MERGE_STORE = 'dsh-installed-groups.builtinMerge.v1'
+    let builtinMerged = (() => {
+      try { return window.localStorage.getItem(BUILTIN_MERGE_STORE) !== 'off' } catch { return true }
+    })()
 
     /** 插件名 → 版本号，由宿主半边跟着布局一起给（官方卡片 DOM 里没有版本）。
      *  取不到就是空表，列表照常显示，只是没有版本号。 */
@@ -441,16 +446,22 @@ window.__ModuleLoader__.load({
       for (const li of body.querySelectorAll(CARD)) {
         const name = li.dataset.pluginPackage || li.dataset.pluginItem || ''
         if (!name) continue
+        // 官方卡片标题是本地化显示名（packageText.title = resolveText(pkg.meta.title)，
+        // 如 @deepseek-ai/dsh-experimental-ralph-bundle → "Ralph 循环"）；技术名只作 key。
+        const label = (li.querySelector('[class*="cardTitle"]')?.textContent?.trim() || '').slice(0, 200)
         const domDesc = li.querySelector('[class*="cardDesc"]')?.textContent?.trim() || ''
         const description = (descriptions[name] || domDesc).slice(0, 2000)
-        const sw = li.querySelector('button[role="switch"],[role="switch"]')
+        const sw = li.querySelector('[role="switch"]')
         const enabled = sw ? sw.getAttribute('aria-checked') !== 'false' : null
-        const switchable = Boolean(sw) && !sw.disabled
+        const locked = Boolean(sw) && (sw.disabled || sw.getAttribute('aria-disabled') === 'true')
+        // 官方锁定的开关带 title=managementText(原因)；没有开关的内核基线项留空。
+        const lockReason = sw?.getAttribute('title') || ''
         // 官方状态追上了期望值（或等太久）就撤掉等待标记
         const wait = pending.get(name)
         if (wait && (enabled === wait.on || Date.now() > wait.until)) pending.delete(name)
         items.push({
-          name, description, enabled, switchable,
+          name, label, description, enabled,
+          switchable: Boolean(sw) && !locked, lockReason,
           version: versions[name] ?? '', waiting: pending.has(name),
         })
       }
@@ -526,6 +537,18 @@ window.__ModuleLoader__.load({
         densityBtn.textContent = density === 'compact' ? '密度:紧凑' : '密度:舒适'
         view.classList.toggle('ig-compact', density === 'compact')
       })
+      const mergeBtn = document.createElement('button')
+      mergeBtn.className = 'ig-btn'
+      mergeBtn.type = 'button'
+      mergeBtn.title = '自带插件：合并成一组 / 按名称与简介自动分开到各类'
+      mergeBtn.textContent = builtinMerged ? '自带插件:合并' : '自带插件:分开'
+      mergeBtn.addEventListener('click', () => {
+        builtinMerged = !builtinMerged
+        try { window.localStorage.setItem(BUILTIN_MERGE_STORE, builtinMerged ? 'on' : 'off') } catch { /* ignore */ }
+        mergeBtn.textContent = builtinMerged ? '自带插件:合并' : '自带插件:分开'
+        view._sig = ''
+        refreshView(view, body, true)
+      })
       const newCat = document.createElement('input')
       newCat.className = 'ig-newcat'
       newCat.placeholder = '＋ 新分类 回车'
@@ -562,7 +585,7 @@ window.__ModuleLoader__.load({
         translateError = ''
         startTranslate(readItems(body), true)
       })
-      bar.append(search, collapseAll, densityBtn, transBtn, translateBtn, newCat, note, chips)
+      bar.append(search, collapseAll, densityBtn, mergeBtn, transBtn, translateBtn, newCat, note, chips)
 
       const list = document.createElement('div')
       list.className = 'ig-list'
@@ -596,9 +619,10 @@ window.__ModuleLoader__.load({
         const shown = descriptionOf(item)
         // 手动指定优先；否则自带官方包单独一组，其余按关键词自动归类。
         const category = layout.assign[item.name]
-          ?? (isBuiltin(item.name) ? BUILTIN : autoCategoryOf(item.name, item.description))
+          ?? (isBuiltin(item.name) && builtinMerged ? BUILTIN
+            : autoCategoryOf(item.name, `${item.label} ${item.description}`))
         const matches = !query
-          || (item.name + ' ' + shown.text + ' ' + item.description).toLowerCase().includes(query)
+          || (item.name + ' ' + item.label + ' ' + shown.text + ' ' + item.description).toLowerCase().includes(query)
           || titleOf(category).toLowerCase().includes(query)
         return { ...item, shown, category, manual: Boolean(layout.assign[item.name]), matches }
       })
@@ -610,10 +634,10 @@ window.__ModuleLoader__.load({
       // 内容没变就整段跳过重建：重建会换掉所有节点，正好落在 mousedown 与
       // mouseup 之间时 click 根本不会触发 —— 「开关点了没反应」大多是这个。
       const sig = JSON.stringify([
-        query, transOn, translateError, translating.size,
+        query, transOn, translateError, translating.size, builtinMerged,
         ids.map((id) => [id, collapsed.has(id), counts.get(id) ?? 0]),
         enriched.map((item) => [
-          item.name, item.description, item.shown.text, item.enabled, item.switchable,
+          item.name, item.label, item.lockReason, item.description, item.shown.text, item.enabled, item.switchable,
           item.version, item.category, item.manual, item.waiting,
         ]),
       ])
@@ -711,8 +735,9 @@ window.__ModuleLoader__.load({
 
       const name = document.createElement('span')
       name.className = 'ig-name'
-      name.textContent = item.name
-      name.title = '打开官方详情页'
+      name.textContent = item.label || item.name
+      name.title = item.label && item.label !== item.name
+        ? `${item.name}\n打开官方详情页` : '打开官方详情页'
       name.addEventListener('click', openDetail)
 
       const desc = document.createElement('span')
@@ -753,7 +778,7 @@ window.__ModuleLoader__.load({
         sw.dataset.on = String(item.enabled)
         sw.title = item.enabled ? '点击停用' : '点击启用'
         sw.addEventListener('click', () => {
-          const official = card()?.querySelector('button[role="switch"],[role="switch"]')
+          const official = card()?.querySelector('[role="switch"]')
           // 官方那一下没点出去（卡片没找到/按钮正忙）就别装作在切
           if (!official || official.disabled) { scheduleReconcile(); return }
           official.click()
@@ -767,7 +792,8 @@ window.__ModuleLoader__.load({
         sw.dataset.on = String(item.enabled ?? false)
         sw.title = item.waiting
           ? '正在切换，等宿主确认…'
-          : item.enabled === null ? '这一行没有开关（内核管理或尚未加载）' : '当前不可切换'
+          : item.enabled === null ? '内核管理，官方不提供开关'
+          : (item.lockReason || '当前不可切换（内核管理或需先安装）')
       }
 
       // 名称行（含版本号，同行）+ 简介一行，竖排：左列 .ig-main，右侧徽标/分类按钮/开关。
