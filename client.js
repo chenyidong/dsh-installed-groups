@@ -6,8 +6,8 @@
  * 分类列表插进同一个滚动容器；数据从官方卡片 DOM 读，开关代理点击官方开关。
  * 官方 React 怎么重建都不影响我们——它从不知道自己的卡片被 CSS 藏起来了。
  *
- * 功能：自动分类（RULES 关键词）+ 自带官方包单独一组 + 手动调整（拖到 chip /
- * 行内下拉）+ 搜索 + 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类 + 简介中文翻译。
+ * 功能：自动分类（RULES 关键词）+ 自带官方包固定单独一组（不可调整）+ 手动调整（拖到 chip /
+ * 行内下拉）+ 搜索 + 启用状态筛选 + 单类折叠（chip）+ 全部折叠 + 密度切换 + 自定义分类 + 简介中文翻译。
  * 开关/详情/卸载走官方。布局与译文都存宿主半边 /installed-groups/layout
  * （$DSH_HOME 文件），没挂上退回 localStorage。译文按「插件名 + 原文」缓存，
  * 翻过的直接加载保存结果，只有原文变了才重翻。
@@ -41,7 +41,19 @@ window.__ModuleLoader__.load({
     const RULE_BY_ID = new Map(RULES.map((rule) => [rule.id, rule]))
     const titleOf = (id) => (id === UNGROUPED ? '未分类'
       : id === BUILTIN ? '自带插件' : RULE_BY_ID.get(id)?.name ?? id)
-    const colorOf = (id) => (id === BUILTIN ? '#3d7fbf' : RULE_BY_ID.get(id)?.color ?? '#8a8a8a')
+    const colorOf = (id) => (id === BUILTIN ? '#3d7fbf'
+      : RULE_BY_ID.get(id)?.color ?? (isHex(layout.colors?.[id]) ? layout.colors[id] : '#8a8a8a'))
+
+    /** 自定义分类圆点配色：新增时从这组预置色里随机抽一个存进 layout.colors，
+     *  重启/换端都稳定复现。避开灰白，保证染到分组底色上仍看得清。 */
+    const PALETTE = ['#e5484d', '#f76b15', '#ffb224', '#46a758', '#12a594', '#0091ff',
+      '#5b7cfa', '#8e4ec6', '#d6409f', '#94d11d', '#00a2c7', '#e18d52']
+    const isHex = (c) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)
+    const pickColor = (taken) => {
+      const pool = PALETTE.filter((c) => !taken.includes(c))
+      const list = pool.length ? pool : PALETTE
+      return list[Math.floor(Math.random() * list.length)]
+    }
 
     /** 随 DSH 发布、不在 profile node_modules 里的官方自带包：@deepseek-ai/ 前缀。
      *  profile 里绝不装这个前缀（实测 0 个），用它判自带干净、不会误伤用户装的包。 */
@@ -68,7 +80,12 @@ window.__ModuleLoader__.load({
       const list = (field, cap) => Array.isArray(source[field])
         ? [...new Set(source[field].filter((id) => typeof id === 'string' && id))].slice(0, cap)
         : []
-      return { version: 1, assign, cats: list('cats', 100).filter((id) => !RULE_BY_ID.has(id)), order: list('order', 200) }
+      const colors = {}
+      if (source.colors && typeof source.colors === 'object' && !Array.isArray(source.colors)) {
+        for (const [id, c] of Object.entries(source.colors)) if (isHex(c)) colors[id] = c
+      }
+      const cats = list('cats', 100).filter((id) => !RULE_BY_ID.has(id))
+      return { version: 1, assign, colors, cats, order: list('order', 200) }
     }
 
     let storageMode = ''
@@ -206,6 +223,8 @@ window.__ModuleLoader__.load({
     }
 
     function setCategory(name, category) {
+      // 自带插件组是保留组：只能由 @deepseek-ai/ 前缀自动进入，手动不可移入。
+      if (category === BUILTIN && !isBuiltin(name)) return
       mutateLayout((current) => {
         const assign = { ...current.assign }
         if (category) assign[name] = category
@@ -217,7 +236,10 @@ window.__ModuleLoader__.load({
     function addCategory(rawName) {
       const id = rawName.trim().slice(0, 30)
       if (!id || RULE_BY_ID.has(id) || id === UNGROUPED) return
-      mutateLayout((current) => current.cats.includes(id) ? {} : { cats: [...current.cats, id] })
+      mutateLayout((current) => current.cats.includes(id) ? {} : {
+        cats: [...current.cats, id],
+        colors: { ...current.colors, [id]: pickColor(Object.values(current.colors)) },
+      })
     }
 
     function renameCategory(oldId, rawName) {
@@ -226,8 +248,11 @@ window.__ModuleLoader__.load({
       mutateLayout((current) => {
         const assign = {}
         for (const [name, cat] of Object.entries(current.assign)) assign[name] = cat === oldId ? next : cat
+        const colors = {}
+        for (const [cat, c] of Object.entries(current.colors)) colors[cat === oldId ? next : cat] = c
         return {
           assign,
+          colors,
           cats: [...new Set(current.cats.map((cat) => (cat === oldId ? next : cat)))],
           order: [...new Set(current.order.map((id) => (id === oldId ? next : id)))],
         }
@@ -235,23 +260,23 @@ window.__ModuleLoader__.load({
     }
 
     function removeCategory(id) {
-      mutateLayout((current) => ({
-        cats: current.cats.filter((cat) => cat !== id),
-        order: current.order.filter((cat) => cat !== id),
-      }))
-    }
-
-    function reorderCategories(dragId, targetId) {
-      if (!dragId || !targetId || dragId === targetId) return
       mutateLayout((current) => {
-        const list = [...current.order]
-        const from = list.indexOf(dragId)
-        if (from >= 0) list.splice(from, 1)
-        const to = list.indexOf(targetId)
-        if (to >= 0) list.splice(to, 0, dragId)
-        else list.push(dragId)
-        return { order: [...new Set(list)] }
+        // 成员的手动归类一并清掉：删除分类后自动回落规则归类，不然它会悬在已删的 id 上。
+        const assign = {}
+        for (const [name, cat] of Object.entries(current.assign)) if (cat !== id) assign[name] = cat
+        const colors = {}
+        for (const [cat, c] of Object.entries(current.colors)) if (cat !== id) colors[cat] = c
+        return {
+          assign,
+          colors,
+          cats: current.cats.filter((cat) => cat !== id),
+          order: current.order.filter((cat) => cat !== id),
+        }
       })
+      if (catFilter === id) {
+        catFilter = ''
+        try { window.localStorage.setItem(CAT_FILTER_STORE, '') } catch { /* ignore */ }
+      }
     }
 
     /* -------------------------------------------------------------------- style */
@@ -261,20 +286,19 @@ window.__ModuleLoader__.load({
 [data-plugin-body] > div[data-ig-group] { display:none !important; }
 [data-plugin-body] > div[data-ig-header] { position:sticky; top:0; z-index:21; background:var(--dsw-alias-bg-base); }
 .ig-view { display:flex; flex-direction:column; gap:0; }
-.ig-bar { position:sticky; top:var(--ig-head-h,0); z-index:20; display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+.ig-bar { position:sticky; top:var(--ig-head-h,0); z-index:20; display:flex; flex-direction:column; gap:6px;
   padding:8px 2px; background:var(--dsw-alias-bg-base); border-bottom:1px solid var(--dsw-alias-border-l1);
   font-size:12px; color:var(--dsw-alias-label-primary); }
+/* 筛选行与操作行各占一行；窄屏时行内自动换行，行与行不再互相挤压。 */
+.ig-frow, .ig-trow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.ig-bar .ig-q { flex:1 1 220px; max-width:420px; }
 .ig-bar input { padding:4px 10px; border-radius:6px; border:1px solid var(--dsw-alias-border-l1);
   background:var(--dsw-alias-bg-layer-1); color:inherit; outline:none; }
 .ig-bar input:focus { border-color:var(--dsw-alias-brand-primary); }
-.ig-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:12px;
-  border:1px solid var(--dsw-alias-border-l1); background:var(--dsw-alias-bg-layer-1); cursor:pointer;
-  user-select:none; font-size:12px; color:var(--dsw-alias-label-primary); }
-.ig-chip em { font-style:normal; opacity:.65; }
-.ig-chip.is-collapsed { opacity:.5; }
-.ig-chip.is-drop { border-color:var(--dsw-alias-brand-primary); box-shadow:0 0 0 1px var(--dsw-alias-brand-primary); }
+.ig-cat-filter { padding:4px 8px; border-radius:6px; border:1px solid var(--dsw-alias-border-l1);
+  background:var(--dsw-alias-bg-layer-1); color:inherit; outline:none; font-size:12px; cursor:pointer; }
+.ig-cat-filter:focus { border-color:var(--dsw-alias-brand-primary); }
 .ig-caret { width:10px; text-align:center; opacity:.8; }
-.ig-chip-dot { width:8px; height:8px; border-radius:50%; }
 .ig-btn { padding:3px 9px; border-radius:6px; border:1px solid var(--dsw-alias-border-l1);
   background:var(--dsw-alias-bg-layer-1); color:inherit; cursor:pointer; font-size:12px; }
 .ig-btn:hover:not(:disabled) { border-color:var(--dsw-alias-border-l2); }
@@ -291,6 +315,8 @@ window.__ModuleLoader__.load({
 .ig-head { display:flex; align-items:center; gap:8px; padding:10px 14px; cursor:pointer; user-select:none;
   font-size:14px; font-weight:600; color:var(--dsw-alias-label-primary); }
 .ig-head:hover { background:var(--dsw-alias-bg-layer-2); }
+.ig-head.is-drop { background:var(--dsw-alias-bg-layer-2); box-shadow:inset 0 0 0 1px var(--dsw-alias-brand-primary); }
+.ig-head .ig-btn { flex:none; }
 .ig-head .ig-caret { font-size:12px; opacity:.8; }
 .ig-head-dot { width:10px; height:10px; border-radius:50%; background:var(--ig-acc, #888); }
 .ig-head em { font-style:normal; font-weight:500; font-size:12px; color:var(--dsw-alias-label-secondary); }
@@ -315,6 +341,7 @@ window.__ModuleLoader__.load({
   color:var(--dsw-alias-label-secondary); }
 .ig-cat-btn:hover { border-color:var(--dsw-alias-brand-primary); color:var(--dsw-alias-label-primary); }
 .ig-cat-btn.is-manual { color:var(--dsw-alias-brand-primary); border-color:var(--dsw-alias-brand-primary); font-weight:600; }
+.ig-cat-btn:disabled { opacity:.55; cursor:default; }
 .ig-menu { position:fixed; z-index:100; min-width:170px; max-height:300px; overflow:auto; padding:4px;
   border:1px solid var(--dsw-alias-border-l2); border-radius:10px; background:var(--dsw-alias-bg-overlay);
   box-shadow:0 8px 24px rgba(0,0,0,.18); font-size:12px; color:var(--dsw-alias-label-primary); }
@@ -353,11 +380,23 @@ window.__ModuleLoader__.load({
     let density = (() => {
       try { return window.localStorage.getItem(DENSITY_STORE) === 'compact' ? 'compact' : 'comfortable' } catch { return 'comfortable' }
     })()
-    // 自带插件默认合并成一组；点工具栏可改成按名称/简介自动分到 10 类。
-    const BUILTIN_MERGE_STORE = 'dsh-installed-groups.builtinMerge.v1'
-    let builtinMerged = (() => {
-      try { return window.localStorage.getItem(BUILTIN_MERGE_STORE) !== 'off' } catch { return true }
+    // 启用状态筛选：全部 / 仅启用 / 仅停用（下拉，与分类下拉并排成筛选行）。
+    const ENABLED_FILTER_STORE = 'dsh-installed-groups.enabledFilter.v1'
+    const ENABLED_FILTER_OPTS = [['all', '状态:全部'], ['on', '仅启用'], ['off', '仅停用']]
+    let enabledFilter = (() => {
+      try {
+        const v = window.localStorage.getItem(ENABLED_FILTER_STORE)
+        return v === 'on' || v === 'off' ? v : 'all'
+      } catch { return 'all' }
     })()
+    // 分类筛选下拉：'' = 全部分类，其余为分类 id（替代原来的顶部 chips 标签栏）。
+    const CAT_FILTER_STORE = 'dsh-installed-groups.catFilter.v1'
+    let catFilter = (() => {
+      try { return window.localStorage.getItem(CAT_FILTER_STORE) || '' } catch { return '' }
+    })()
+    // 搜索词只记在模块变量里（不落盘）：进详情页时视图会被拆掉，返回重建时回填，
+    // 不然「搜一半点进去看，回来全没了」。
+    let lastQuery = ''
 
     /** 插件名 → 版本号，由宿主半边跟着布局一起给（官方卡片 DOM 里没有版本）。
      *  取不到就是空表，列表照常显示，只是没有版本号。 */
@@ -516,16 +555,30 @@ window.__ModuleLoader__.load({
       const search = document.createElement('input')
       search.className = 'ig-q'
       search.placeholder = '搜索插件、简介、分类…'
-      search.addEventListener('input', () => refreshView(view, body, true))
+      search.value = lastQuery
+      search.addEventListener('input', () => {
+        lastQuery = search.value
+        refreshView(view, body, true)
+      })
+      // 分类下拉筛选：替代原来的顶部 chip 标签栏。选项在 refreshView 里按当前分类填充。
+      const catSel = document.createElement('select')
+      catSel.className = 'ig-cat-filter'
+      catSel.title = '按分类筛选'
+      catSel.addEventListener('change', () => {
+        catFilter = catSel.value
+        try { window.localStorage.setItem(CAT_FILTER_STORE, catFilter) } catch { /* ignore */ }
+        view._sig = ''
+        refreshView(view, body, true)
+      })
       const collapseAll = document.createElement('button')
       collapseAll.className = 'ig-btn ig-collapse-all'
       collapseAll.textContent = '△ 全部折叠'
       collapseAll.addEventListener('click', () => {
-        const all = [...bar.querySelectorAll('.ig-chip')].map((chip) => chip.dataset.cat)
+        const all = view._ids ?? []
         const isAll = all.length > 0 && all.every((id) => collapsed.has(id))
         collapsed.clear()
         if (!isAll) all.forEach((id) => collapsed.add(id))
-        refreshView(view, body)
+        refreshView(view, body, true)
       })
       const densityBtn = document.createElement('button')
       densityBtn.className = 'ig-btn'
@@ -537,32 +590,36 @@ window.__ModuleLoader__.load({
         densityBtn.textContent = density === 'compact' ? '密度:紧凑' : '密度:舒适'
         view.classList.toggle('ig-compact', density === 'compact')
       })
-      const mergeBtn = document.createElement('button')
-      mergeBtn.className = 'ig-btn'
-      mergeBtn.type = 'button'
-      mergeBtn.title = '自带插件：合并成一组 / 按名称与简介自动分开到各类'
-      mergeBtn.textContent = builtinMerged ? '自带插件:合并' : '自带插件:分开'
-      mergeBtn.addEventListener('click', () => {
-        builtinMerged = !builtinMerged
-        try { window.localStorage.setItem(BUILTIN_MERGE_STORE, builtinMerged ? 'on' : 'off') } catch { /* ignore */ }
-        mergeBtn.textContent = builtinMerged ? '自带插件:合并' : '自带插件:分开'
+      const enabledSel = document.createElement('select')
+      enabledSel.className = 'ig-cat-filter ig-enabled-filter'
+      enabledSel.title = '按启用状态筛选'
+      enabledSel.innerHTML = ENABLED_FILTER_OPTS.map(([v, label]) =>
+        `<option value="${v}"${v === enabledFilter ? ' selected' : ''}>${label}</option>`).join('')
+      enabledSel.addEventListener('change', () => {
+        enabledFilter = ENABLED_FILTER_OPTS.some(([v]) => v === enabledSel.value) ? enabledSel.value : 'all'
+        try { window.localStorage.setItem(ENABLED_FILTER_STORE, enabledFilter) } catch { /* ignore */ }
         view._sig = ''
         refreshView(view, body, true)
       })
+      // 新增分类：输入名称后点「＋ 新增」或回车确认。
       const newCat = document.createElement('input')
       newCat.className = 'ig-newcat'
-      newCat.placeholder = '＋ 新分类 回车'
+      newCat.placeholder = '新分类名称'
       newCat.style.width = '110px'
+      const newCatBtn = document.createElement('button')
+      newCatBtn.className = 'ig-btn ig-newcat-btn'
+      newCatBtn.type = 'button'
+      newCatBtn.textContent = '＋ 新增'
+      const commitNewCat = () => {
+        addCategory(newCat.value)
+        newCat.value = ''
+      }
+      newCatBtn.addEventListener('click', commitNewCat)
       newCat.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter') return
-        addCategory(event.target.value)
-        event.target.value = ''
+        if (event.key === 'Enter') commitNewCat()
       })
       const note = document.createElement('span')
       note.className = 'ig-note'
-      const chips = document.createElement('span')
-      chips.className = 'ig-chips'
-      chips.style.cssText = 'display:contents'
       const transBtn = document.createElement('button')
       transBtn.className = 'ig-btn ig-trans-toggle'
       transBtn.type = 'button'
@@ -585,7 +642,14 @@ window.__ModuleLoader__.load({
         translateError = ''
         startTranslate(readItems(body), true)
       })
-      bar.append(search, collapseAll, densityBtn, mergeBtn, transBtn, translateBtn, newCat, note, chips)
+      // 两行布局：筛选行（搜索 + 分类 + 状态）与操作行（折叠 / 密度 / 译文 / 翻译 / 新增分类 / 计数）。
+      const filterRow = document.createElement('div')
+      filterRow.className = 'ig-frow'
+      filterRow.append(search, catSel, enabledSel)
+      const toolRow = document.createElement('div')
+      toolRow.className = 'ig-trow'
+      toolRow.append(collapseAll, densityBtn, transBtn, translateBtn, newCat, newCatBtn, note)
+      bar.append(filterRow, toolRow)
 
       const list = document.createElement('div')
       list.className = 'ig-list'
@@ -593,6 +657,9 @@ window.__ModuleLoader__.load({
       view.classList.toggle('ig-compact', density === 'compact')
       view._bar = bar
       view._list = list
+      view._catSel = catSel
+      view._newCat = newCat
+      view._newCatBtn = newCatBtn
       // 聚焦跟踪：输入框/分类菜单打开期间冻结重建（见 refreshView 的守卫）。
       view.addEventListener('focusin', (event) => {
         if (event.target.tagName === 'INPUT') view._busy = true
@@ -613,18 +680,22 @@ window.__ModuleLoader__.load({
       // 分类菜单展开时也不重建：锚点按钮被换掉菜单就悬空了。
       if (openMenu) return
       const items = readItems(body)
-      const query = (view._bar.querySelector('.ig-q')?.value ?? '').trim().toLowerCase()
+      const query = (view._bar.querySelector('.ig-q')?.value ?? lastQuery).trim().toLowerCase()
 
       const enriched = items.map((item) => {
         const shown = descriptionOf(item)
-        // 手动指定优先；否则自带官方包单独一组，其余按关键词自动归类。
-        const category = layout.assign[item.name]
-          ?? (isBuiltin(item.name) && builtinMerged ? BUILTIN
-            : autoCategoryOf(item.name, `${item.label} ${item.description}`))
-        const matches = !query
+        // 自带官方包固定单独一组、不可调整；其余手动指定优先，否则按关键词自动归类。
+        // 旧数据里普通插件被手动归进「自带插件」组的视为无效，回落自动归类。
+        const builtin = isBuiltin(item.name)
+        const assigned = !builtin && layout.assign[item.name] && layout.assign[item.name] !== BUILTIN
+          ? layout.assign[item.name] : ''
+        const category = builtin ? BUILTIN
+          : assigned || autoCategoryOf(item.name, `${item.label} ${item.description}`)
+        const matches = (!query
           || (item.name + ' ' + item.label + ' ' + shown.text + ' ' + item.description).toLowerCase().includes(query)
-          || titleOf(category).toLowerCase().includes(query)
-        return { ...item, shown, category, manual: Boolean(layout.assign[item.name]), matches }
+          || titleOf(category).toLowerCase().includes(query))
+          && (enabledFilter === 'all' || item.enabled === (enabledFilter === 'on'))
+        return { ...item, shown, category, builtin, manual: Boolean(assigned), matches }
       })
       queueTranslate(items)
       const counts = new Map()
@@ -634,21 +705,23 @@ window.__ModuleLoader__.load({
       // 内容没变就整段跳过重建：重建会换掉所有节点，正好落在 mousedown 与
       // mouseup 之间时 click 根本不会触发 —— 「开关点了没反应」大多是这个。
       const sig = JSON.stringify([
-        query, transOn, translateError, translating.size, builtinMerged,
+        query, transOn, translateError, translating.size, enabledFilter, catFilter, layout.colors,
         ids.map((id) => [id, collapsed.has(id), counts.get(id) ?? 0]),
         enriched.map((item) => [
           item.name, item.label, item.lockReason, item.description, item.shown.text, item.enabled, item.switchable,
-          item.version, item.category, item.manual, item.waiting,
+          item.version, item.category, item.manual, item.builtin, item.waiting,
         ]),
       ])
       if (view._sig === sig) return
       view._sig = sig
 
-      updateChips(view, ids, counts)
+      view._ids = ids
+      updateCatFilter(view, ids, counts)
 
       // 列表：整段重建（都是我们自己的节点，重建成本极低且无 React 纠纷）。
       const nodes = []
       for (const id of ids) {
+        if (catFilter && id !== catFilter) continue
         const rows = enriched.filter((item) => item.category === id && item.matches)
         if (rows.length === 0 && !layout.cats.includes(id)) continue
         const head = document.createElement('div')
@@ -664,6 +737,33 @@ window.__ModuleLoader__.load({
         const count = document.createElement('em')
         count.textContent = ` ${counts.get(id) ?? 0}`
         head.append(caret, dot, label, count)
+        // 自定义分类：标题右侧给「重命名 / 删除」按钮（删除后该组成员自动回落规则归类）。
+        if (layout.cats.includes(id)) {
+          const spacer = document.createElement('span')
+          spacer.style.cssText = 'flex:1 1 auto'
+          const rename = document.createElement('button')
+          rename.className = 'ig-btn ig-head-rename'
+          rename.type = 'button'
+          rename.textContent = '✎'
+          rename.title = '重命名分类（Enter 确认 / Esc 取消）'
+          rename.addEventListener('click', (event) => {
+            event.stopPropagation()
+            label.replaceWith(inlineEditor(id, titleOf(id), view))
+            view._sig = ''
+          })
+          const del = document.createElement('button')
+          del.className = 'ig-btn ig-head-del'
+          del.type = 'button'
+          del.textContent = '×'
+          del.title = (counts.get(id) ?? 0) > 0
+            ? `删除分类：仍有 ${counts.get(id)} 个成员，删除后它们自动回落规则归类`
+            : '删除这个空分类'
+          del.addEventListener('click', (event) => {
+            event.stopPropagation()
+            removeCategory(id)
+          })
+          head.append(spacer, rename, del)
+        }
         const group = document.createElement('div')
         group.className = `ig-group${collapsed.has(id) ? ' is-collapsed' : ''}`
         group.style.setProperty('--ig-acc', colorOf(id))
@@ -680,7 +780,7 @@ window.__ModuleLoader__.load({
           const empty = document.createElement('div')
           empty.className = 'ig-note'
           empty.style.padding = '6px 14px 12px'
-          empty.textContent = '空分类：把插件行拖到顶部分类 chip，或用行内下拉选它。'
+          empty.textContent = '空分类：用每行右侧的分类按钮把插件移入本类。'
           group.append(empty)
         }
         for (const item of rows) group.append(rowNode(view, body, item, ids))
@@ -711,7 +811,8 @@ window.__ModuleLoader__.load({
         .find((el) => (el.dataset.pluginPackage || el.dataset.pluginItem) === item.name) ?? null
       const row = document.createElement('div')
       row.className = 'ig-row'
-      row.draggable = true
+      // 自带插件固定分组：不可拖到 chip 换类。
+      row.draggable = !item.builtin
       row.addEventListener('dragstart', (event) => {
         event.dataTransfer.setData('text/plain', `item:${item.name}`)
       })
@@ -757,18 +858,24 @@ window.__ModuleLoader__.load({
 
       const tag = document.createElement('span')
       tag.className = `ig-tag${item.manual ? ' is-manual' : ''}`
-      tag.textContent = item.manual ? '手动' : '自动'
-      tag.title = item.manual ? '手动指定，点击恢复自动' : '按名称/简介自动归类'
+      tag.textContent = item.builtin ? '自带' : item.manual ? '手动' : '自动'
+      tag.title = item.builtin ? '自带插件固定分组，不可调整'
+        : item.manual ? '手动指定，点击恢复自动' : '按名称/简介自动归类'
       if (item.manual) tag.addEventListener('click', () => setCategory(item.name, ''))
 
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.className = `ig-cat-btn${item.manual ? ' is-manual' : ''}`
       btn.textContent = (item.manual ? '' : '↺ ') + titleOf(item.category)
-      btn.title = item.manual
-        ? `手动归类：${titleOf(item.category)}，点选可改；选「↺ 自动归类」恢复规则`
-        : `自动归类：${titleOf(item.category)}，点选即手动`
-      btn.addEventListener('click', () => openCatMenu(btn, item, ids))
+      if (item.builtin) {
+        btn.disabled = true
+        btn.title = '自带插件固定单独一组，不可调整'
+      } else {
+        btn.title = item.manual
+          ? `手动归类：${titleOf(item.category)}，点选可改；选「↺ 自动归类」恢复规则`
+          : `自动归类：${titleOf(item.category)}，点选即手动`
+        btn.addEventListener('click', () => openCatMenu(btn, item, ids))
+      }
 
       const sw = document.createElement('button')
       sw.className = 'ig-switch'
@@ -841,8 +948,9 @@ window.__ModuleLoader__.load({
       const menu = document.createElement('div')
       menu.className = 'ig-menu'
       menu.anchor = btn
+      // 自带插件组是保留组，不出现在换类菜单里。
       const entries = [{ value: '', label: '↺ 自动归类', color: '' },
-        ...ids.map((id) => ({ value: id, label: titleOf(id), color: colorOf(id) }))]
+        ...ids.filter((id) => id !== BUILTIN).map((id) => ({ value: id, label: titleOf(id), color: colorOf(id) }))]
       for (const entry of entries) {
         const row = document.createElement('div')
         row.className = `ig-menu-item${(item.manual ? item.category : '') === entry.value ? ' is-active' : ''}`
@@ -863,52 +971,28 @@ window.__ModuleLoader__.load({
       openMenu = menu
     }
 
-    /* -------------------------------------------------------------------- chips */
+    /* ---------------------------------------------------------- 分类下拉筛选 */
 
-    function updateChips(view, ids, counts) {
-      const chips = view._bar.querySelector('.ig-chips')
-      const signature = ids.map((id) => `${id}:${collapsed.has(id) ? 'c' : 'o'}:${layout.cats.includes(id) ? 'x' : ''}`).join('|')
-      if (chips.dataset.sig === signature) return
-      chips.dataset.sig = signature
-      // 重建前必须清空：否则每次签名变化都往同一容器追加一排，筛选栏越叠越长。
-      chips.replaceChildren()
+    /** 顶部 chip 栏的去向：分类填进下拉，选某类即只看该类（'' 为全部）。 */
+    function updateCatFilter(view, ids, counts) {
+      const sel = view._catSel
+      if (!sel) return
+      const opts = [`<option value="">全部分类</option>`,
+        ...ids.map((id) => `<option value="${escapeHtml(id)}">${escapeHtml(titleOf(id))} (${counts.get(id) ?? 0})</option>`)].join('')
+      if (sel.dataset.opts !== opts) {
+        sel.dataset.opts = opts
+        sel.innerHTML = opts
+      }
+      // 选中的分类被删掉时回落「全部」，别让下拉停在一个空值上。
+      const next = ids.includes(catFilter) ? catFilter : ''
+      if (sel.value !== next) sel.value = next
       const allCollapsed = ids.length > 0 && ids.every((id) => collapsed.has(id))
       view._bar.querySelector('.ig-collapse-all').textContent = allCollapsed ? '▽ 全部展开' : '△ 全部折叠'
-      for (const id of ids) {
-        const chip = document.createElement('span')
-        chip.className = `ig-chip${collapsed.has(id) ? ' is-collapsed' : ''}`
-        chip.dataset.cat = id
-        chip.draggable = true
-        chip.title = '卡片/行拖到这里=移入本类；拖动 chip 排类序'
-        const dot = document.createElement('i')
-        dot.className = 'ig-chip-dot'
-        dot.style.background = colorOf(id)
-        const label = document.createElement('span')
-        label.textContent = titleOf(id)
-        const count = document.createElement('em')
-        count.textContent = String(counts.get(id) ?? 0)
-        chip.append(dot, label, count)
-        if (layout.cats.includes(id)) {
-          const rename = document.createElement('button')
-          rename.className = 'ig-btn'
-          rename.type = 'button'
-          rename.textContent = '✎'
-          rename.title = '重命名（Enter 确认 / Esc 取消）'
-          rename.addEventListener('click', () => {
-            label.replaceWith(inlineEditor(id, titleOf(id), view))
-            chips.dataset.sig = ''
-          })
-          const del = document.createElement('button')
-          del.className = 'ig-btn'
-          del.type = 'button'
-          del.textContent = '×'
-          del.title = (counts.get(id) ?? 0) === 0 ? '删除这个空分类' : '还有成员，先移空再删'
-          del.disabled = (counts.get(id) ?? 0) > 0
-          del.addEventListener('click', () => removeCategory(id))
-          chip.append(rename, del)
-        }
-        chips.append(chip)
-      }
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (ch) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
     }
 
     /** Electron 里没有 window.prompt：行内输入框，Enter 确认、Esc/失焦收尾。 */
@@ -934,7 +1018,7 @@ window.__ModuleLoader__.load({
       return input
     }
 
-    /* 拖放：行/卡片 → chip 换类；chip → chip 排类序。委托在 document。 */
+    /* 拖放：行/卡片拖到分组标题 = 移入该类（chip 栏取消后换类的入口之一，另一个是行内分类菜单）。 */
     document.addEventListener('dragstart', (event) => {
       const li = event.target instanceof Element ? event.target.closest(CARD) : null
       if (!li) return
@@ -942,24 +1026,23 @@ window.__ModuleLoader__.load({
       if (name) event.dataTransfer.setData('text/plain', `item:${name}`)
     })
     document.addEventListener('dragover', (event) => {
-      const chip = event.target instanceof Element ? event.target.closest('.ig-chip') : null
-      if (!chip) return
+      const head = event.target instanceof Element ? event.target.closest('.ig-head') : null
+      if (!head) return
       event.preventDefault()
-      chip.classList.add('is-drop')
+      head.classList.add('is-drop')
     })
     document.addEventListener('dragleave', (event) => {
-      const chip = event.target instanceof Element ? event.target.closest('.ig-chip') : null
-      if (chip?.contains(event.relatedTarget ?? null)) return
-      chip?.classList.remove('is-drop')
+      const head = event.target instanceof Element ? event.target.closest('.ig-head') : null
+      if (head?.contains(event.relatedTarget ?? null)) return
+      head?.classList.remove('is-drop')
     })
     document.addEventListener('drop', (event) => {
-      const chip = event.target instanceof Element ? event.target.closest('.ig-chip') : null
-      if (!chip) return
+      const head = event.target instanceof Element ? event.target.closest('.ig-head') : null
+      if (!head) return
       event.preventDefault()
-      chip.classList.remove('is-drop')
+      head.classList.remove('is-drop')
       const payload = event.dataTransfer?.getData('text/plain') ?? ''
-      if (payload.startsWith('item:')) setCategory(payload.slice(5), chip.dataset.cat)
-      else if (payload.startsWith('head:')) reorderCategories(payload.slice(5), chip.dataset.cat)
+      if (payload.startsWith('item:')) setCategory(payload.slice(5), head.dataset.cat)
     })
 
     /* ------------------------------------------------------------------ 生命周期 */
@@ -981,7 +1064,19 @@ window.__ModuleLoader__.load({
         styleTag.setAttribute('data-installed-groups', 'base')
         styleTag.textContent = STYLE
         document.head.append(styleTag)
-        loadLayout().then((loaded) => { layout = loaded; scheduleReconcile() })
+        loadLayout().then((loaded) => {
+          layout = loaded
+          // 存量自定义分类还没颜色：首次加载补一个随机的并落盘（之后一直稳定）。
+          if (layout.cats.some((cat) => !isHex(layout.colors[cat]))) {
+            mutateLayout((current) => {
+              const colors = { ...current.colors }
+              for (const cat of current.cats) if (!isHex(colors[cat])) colors[cat] = pickColor(Object.values(colors))
+              return { colors }
+            })
+          } else {
+            scheduleReconcile()
+          }
+        })
         reconcileAll()
         pollTimer = setInterval(reconcileAll, 700)
       },

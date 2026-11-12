@@ -50,7 +50,13 @@ function normalize(value) {
   const cats = Array.isArray(source.cats)
     ? [...new Set(source.cats.filter((id) => typeof id === 'string' && id))].slice(0, 100)
     : []
-  return { version: 1, assign: assign('assign'), order, cats }
+  const colors = {}
+  if (source.colors && typeof source.colors === 'object' && !Array.isArray(source.colors)) {
+    for (const [id, c] of Object.entries(source.colors).slice(0, 100)) {
+      if (typeof id === 'string' && id && typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)) colors[id.slice(0, 60)] = c
+    }
+  }
+  return { version: 1, assign: assign('assign'), order, cats, colors }
 }
 
 /** 译文表：{ 插件名: { source: 原文, text: 中文 } }。文件不可信，逐条收敛。 */
